@@ -1,7 +1,5 @@
 import numpy as np
 
-from .transforms import BBoxTransform
-
 
 class FrozenError(Exception):
     pass
@@ -9,7 +7,7 @@ class FrozenError(Exception):
 
 class AnchorPoint(object):
 
-    def __init__(self, x=0, y=0, frozen=False, visible=True):
+    def __init__(self, x=0, y=0, frozen=False, visible=False):
         self._x = x
         self._y = y
         self._frozen = frozen
@@ -55,6 +53,7 @@ class AnchorPoint(object):
 
 
 class Pointer(object):
+
     def __init__(self, label):
         self.label = label
 
@@ -73,7 +72,7 @@ class BBox(object):
     theta = Pointer('_theta')
 
     def __init__(self, center=(0, 0), width=1, height=1, theta=0):
-        self._center  = center
+        self._center = center
         self._width = width
         self._height = height
         self._theta = theta
@@ -104,16 +103,15 @@ class BBox(object):
         """
         self._height = self._width / value
 
-
     @property
     def vertices(self):
         """
-        The 4 corners of the Bbox, as a list of tuples
+        The 4 corners of the Bbox, as a dict of tuples
 
-        Returns the corners starting with the upper left, moving clockwise.
+        Returns a dict mapping vertex label to coordinate tuple
         """
-        x = np.array([-0.5, 0.5, 0.5, -0.5]) * self.width
-        y = np.array([0.5, 0.5, -0.5, -0.5]) * self.height
+        x = np.array([-0.5, 0, 0.5, 0.5, 0.5, 0, -0.5]) * self.width
+        y = np.array([0.5, 0.5, 0.5, 0, -0.5, -0.5, -0.5]) * self.height
 
         # rotate
         t = np.radians(self.theta)
@@ -125,7 +123,22 @@ class BBox(object):
         x += self.center[0]
         y += self.center[1]
 
-        return list(map(tuple, np.column_stack((x, y)).tolist()))
+        labels = 'ul uc ur cr lr lc ll cl'.split()
+        return dict((lbl, (x, y)) for lbl, x, y in zip(labels, x, y))
+
+    def anchor_pos(self, anchor_id):
+        """Return the coordinates of one of the anchor points of the bouding box
+
+        Parameters
+        ----------
+        anchor_id: 'ul'|'uc'|'ur'|'cl'|'cc'|'cr'|'ll'|'lc'|'lr'
+            An anchor label
+
+        Returns
+        -------
+        Tuple of (x, y)
+        """
+        return self.vertices[anchor_id]
 
     def move_anchor(self, x, y, id, mode='resize'):
         """
@@ -137,9 +150,8 @@ class BBox(object):
             The x-location the anhchor was dragged to
         y : float
             The y-location the anchor was dragged to
-        id : 0-7
-            The ID of the anchor point. The anchors are numbered starting from
-            0 in the top left, and going clockwise.
+        id : 'ul'|'uc'|'ur'|'cl'|'cc'|'cr'|'ll'|'lc'|'lr'
+            The ID of the anchor point.
         mode : str, optional (default 'resize')
             How to respond to the update
 
@@ -153,18 +165,13 @@ class BBox(object):
 
         fix = {'theta': False, 'center': False, 'aspect': False}
 
-
         # For now, hard-code different modes, then look for common patterns
-
         if mode == 'rotate':
             # We find the angle from dx, dy. For theta=0, vertex=0 is at PA of 135
             # degrees (top left)
             self.theta = np.degrees(np.arctan2(dy, dx)) - 135 + 45 * float(id)
 
-
-
         # TREAT ROTATE SEPARATELY? (since orthogonal to all other cases)
-
         if mode == 'rotate':
             fix['center'] = True
             fix['aspect'] = self.aspect
@@ -190,7 +197,8 @@ class BBox(object):
                              "'resize-square-', or 'resize-center-aspect'".format(mode))
 
         # Find id of opposite anchor
-        opposite_id = (id + 4) % 8
+        opposite_id = {'ul': 'lr', 'uc': 'lc', 'ur': 'll', 'cl': 'cr',
+                       'lr': 'ul', 'lc': 'uc', 'll': 'ur', 'cr': 'cl'}[id]
 
         # If fix['center'] = True, then we should work in the frame of reference
         # of center of bbox. Otherwise use opposite anchor as origin.
@@ -208,9 +216,10 @@ class BBox(object):
             return
 
         if fix['aspect'] is not False:
-            pass  # TODO
+            raise
+            # TODO
         else:
-            pass
+            raise
             # Here determine width and height from dx, dy, but need to take into account rotation. Should be
 
         # MAGIC HERE
