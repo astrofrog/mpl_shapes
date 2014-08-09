@@ -72,7 +72,15 @@ class BBox(object):
         self._width = width
         self._height = height
         self._theta = theta
-    
+
+    def get_transform(self, ax):
+        """
+        Return a matplotlib transform to transform from the frame of reference
+        of the bounding box into the display frame of reference.
+        """
+        from .transforms import BBoxTransform
+        return BBoxTransform(ax, self)
+
     @property
     def aspect(self):
         """
