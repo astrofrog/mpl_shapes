@@ -72,7 +72,19 @@ class BBox(object):
         self._width = width
         self._height = height
         self._theta = theta
-    
+
+    @property
+    def mpl_transform(self):
+        """
+        Return a matplotlib transform to transform into the frame of reference
+        of the bounding box.
+        """
+        from matplotlib.transforms import Affine2D
+        return (Affine2D().scale(self.width, self.height)
+                          .translate(-self.width * 0.5, -self.height * 0.5)
+                          .rotate_deg(self.theta)
+                          .translate(*self.center))
+
     @property
     def aspect(self):
         """
