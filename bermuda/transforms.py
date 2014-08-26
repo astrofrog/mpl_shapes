@@ -5,6 +5,7 @@ from matplotlib.path import Path
 
 
 class BBoxTransform(Transform):
+
     """
     A class to transform from the frame of reference of the bounding box to
     display coordinates.
@@ -72,6 +73,9 @@ class BBoxTransform(Transform):
         else:
             tr = self._frozen_ax_transform.inverted() + self._ax.transData
             return tr.transform(raw_display)
+
+    def __call__(self, coords):
+        return self.transform(coords)
 
     def inverted(self, coords):
         raise NotImplementedError("")

@@ -23,7 +23,7 @@ def default_mode_chooser(event):
     This default mode chooser mimics the style from Keynote, Illustrator, etc.
     """
 
-    if event.command:
+    if event.super:
         return 'rotate'
     if event.shift and event.alt:
         return 'resize-center-aspect'
@@ -65,6 +65,7 @@ class MouseEvent(object):
         self.y = y
         self.button = button
         self.control = alt
+        self.shift = shift
         self.alt = alt
         self.super = super
 
@@ -79,6 +80,31 @@ class MouseEvent(object):
     @property
     def right(self):
         return self.button == 2
+
+    @classmethod
+    def from_mpl(cls, event):
+        return cls(event.x, event.y, event.button,
+                   shift=event.key and 'shift' in event.key,
+                   control=event.key and 'ctrl' in event.key,
+                   alt=event.key and 'alt' in event.key,
+                   super=event.key and 'super' in event.key)
+
+
+def callback(func):
+    _callbacks = []
+
+    def add_callback(f):
+        _callbacks.append(f)
+
+    def wrapper(*args, **kwargs):
+        result = func(*args, **kwargs)
+        for c in _callbacks:
+            c()
+        return result
+
+    wrapper.add_callback = add_callback
+
+    return wrapper
 
 
 class Controller(object):
@@ -111,11 +137,14 @@ class Controller(object):
         # XXX support for add_anchor_point to polygons
 
         self._anchor = self.bbox.pick(event.x, event.y)
+
+        print self._anchor
         if self._anchor is None:
             return
         self._start_bbox = self.bbox.copy()
         self._start_event = event
 
+    @callback
     def move(self, event):
         """
         Process a mouse move event
@@ -135,3 +164,14 @@ class Controller(object):
         Process a mouse release event
         """
         self._anchor = self._start_bbox = self._start_event = None
+
+    def connect_mpl(self, canvas):
+        def wrap(method):
+            def result(event):
+                event = MouseEvent.from_mpl(event)
+                return method(event)
+            return result
+
+        self._cid1 = canvas.mpl_connect('button_press_event', wrap(self.press))
+        self._cid2 = canvas.mpl_connect('motion_notify_event', wrap(self.move))
+        self._cid3 = canvas.mpl_connect('button_release_event', wrap(self.release))

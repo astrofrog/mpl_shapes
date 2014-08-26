@@ -80,8 +80,25 @@ class BBox(object):
         self._theta = theta
         self._transform = BBoxTransform(self)
 
+    def pick(self, x, y):
+
+        ks = self.vertices.keys()
+        vs = np.array([self.vertices[k] for k in ks])
+
+        dist = [np.hypot(v[0] - x, v[1] - y) for v in vs]
+        best = np.argmin(dist)
+        if dist[best] < 20:
+            return ks[best]
+
     def copy(self):
         return BBox(self.center, self.width, self.height, self.theta)
+
+    def update(self, other):
+        self._center = other.center
+        self._width = other.width
+        self._height = other.height
+        self._theta = other.theta
+        self._transform = other.transform
 
     @property
     def transform(self, ax=None):
