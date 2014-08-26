@@ -1,5 +1,7 @@
 import numpy as np
 
+from .transforms import BBoxTransform
+
 
 class FrozenError(Exception):
     pass
@@ -78,6 +80,9 @@ class BBox(object):
         self._theta = theta
         self._transform = BBoxTransform(self)
 
+    def copy(self):
+        return BBox(self.center, self.width, self.height, self.theta)
+
     @property
     def transform(self, ax=None):
         """
@@ -85,7 +90,7 @@ class BBox(object):
         of the bounding box to the display coordinates.
         """
         return self._transform
-                        
+
     def tie_to_axes(self, ax):
         self._transform.tie_to_axes(ax)
 
@@ -110,8 +115,8 @@ class BBox(object):
 
         Returns a dict mapping vertex label to coordinate tuple
         """
-        x = np.array([-0.5, 0, 0.5, 0.5, 0.5, 0, -0.5]) * self.width
-        y = np.array([0.5, 0.5, 0.5, 0, -0.5, -0.5, -0.5]) * self.height
+        x = np.array([-0.5, 0, 0.5, 0.5, 0.5, 0, -0.5, -0.5]) * self.width
+        y = np.array([0.5, 0.5, 0.5, 0, -0.5, -0.5, -0.5, 0]) * self.height
 
         # rotate
         t = np.radians(self.theta)
@@ -163,63 +168,36 @@ class BBox(object):
             'resize-center-square' fixes the aspect ratio to 1 and preserves the center
         """
 
-        fix = {'theta': False, 'center': False, 'aspect': False}
-
-        # For now, hard-code different modes, then look for common patterns
-        if mode == 'rotate':
-            # We find the angle from dx, dy. For theta=0, vertex=0 is at PA of 135
-            # degrees (top left)
-            self.theta = np.degrees(np.arctan2(dy, dx)) - 135 + 45 * float(id)
-
-        # TREAT ROTATE SEPARATELY? (since orthogonal to all other cases)
-        if mode == 'rotate':
-            fix['center'] = True
-            fix['aspect'] = self.aspect
-        elif mode == 'resize':
-            fix['theta'] = True
-        elif mode == 'resize-center':
-            fix['theta'] = True
-            fix['center'] = True
-        elif mode == 'resize-center-aspect':
-            fix['theta'] = True
-            fix['center'] = True
-            fix['aspect'] = self.aspect
-        elif mode == 'resize-square':
-            fix['theta'] = True
-            fix['aspect'] = 1.
-        elif mode == 'resize-center-square':
-            fix['theta'] = True
-            fix['center'] = True
-            fix['aspect'] = 1.
-        else:
-            raise ValueError("Unknown mode: {0} (should be one of 'resize', "
-                             "'resize-center', 'resize-aspect', 'resize-center-aspect', "
-                             "'resize-square-', or 'resize-center-aspect'".format(mode))
-
         # Find id of opposite anchor
         opposite_id = {'ul': 'lr', 'uc': 'lc', 'ur': 'll', 'cl': 'cr',
                        'lr': 'ul', 'lc': 'uc', 'll': 'ur', 'cr': 'cl'}[id]
 
-        # If fix['center'] = True, then we should work in the frame of reference
-        # of center of bbox. Otherwise use opposite anchor as origin.
-        if fix['center']:
-            dx, dy = x - self.center[0], self.center[1]
-        else:
-            opposite_vertex = self.vertices[opposite_id]  # need to update vertices to return 8 values
-            dx, dy = x - opposite_vertex[0], opposite_vertex[1]
+        v = self.vertices
+        x0, y0 = v[id]
+        x1, y1 = v[opposite_id]
 
-        # If fix['theta'] is False, we are rotating the shape so now we just
-        # find the angle from dx, dy. For theta=0, vertex=0 is at PA of 135
-        # degrees (top left)
-        if fix['theta']:
-            self.theta = np.degrees(np.arctan2(dy, dx)) - 135 + 45 * float(id)
-            return
+        if mode == 'resize':
 
-        if fix['aspect'] is not False:
-            raise
-            # TODO
-        else:
-            raise
-            # Here determine width and height from dx, dy, but need to take into account rotation. Should be
+            if id[1] != 'c':  # update horizontal
+                self._width = abs(x1 - x)
+                self._center = (x + x1) / 2., self._center[1]
+            if id[0] != 'c':  # update vertical
+                self._height = abs(y1 - y)
+                self._center = self._center[0], (y + y1) / 2.
 
-        # MAGIC HERE
+            return self
+
+        if mode == 'resize-center':
+            if id[1] != 'c':  # update horizontal
+                dx = (x - x0)
+                l, r = x0 + dx, x1 - dx
+                self._width = abs(l - r)
+                self._center = (l + r) / 2., self._center[0]
+            if id[0] != 'c':  # update vertical
+                dy = (y - y0)
+                b, t = y0 + dy, y1 - dy
+                self._height = abs(b - t)
+                self._center = self._center[0], (b + t) / 2.
+            return self
+
+        raise NotImplementedError(mode)

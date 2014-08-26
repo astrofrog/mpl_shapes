@@ -122,46 +122,17 @@ class AnchorDragBase(object):
     dx = [-1, 0, 1]
     dy = [-1, 0, 1]
 
-    def iter_drags(self):
-        """ Drag an anchor in a variety of different directions """
-        for anchor, dx, dy in product('ul uc ur ll lc lr cl cr'.split(),
-                                      self.dx,
-                                      self.dy):
-            bb = BBox(center=self.CENTER, width=self.WIDTH,
-                      height=self.HEIGHT, theta=self.THETA)
-            x, y = bb.anchor_pos(anchor)
-            bb.move_anchor(x + dx, y + dy, anchor)
-            yield anchor, dx, dy, bb
+    TEST_CASES = product('ul uc ur ll lc lr cl cr'.split(), dx, dy)
 
-    def test_drags(self):
-        """ Assert that the bbox changes as expected
-            as a particular anchor moves
+    @pytest.mark.parametrize(('anchor', 'dx', 'dy'), TEST_CASES)
+    def test_drag(self, anchor, dx, dy):
+        bb = BBox(center=self.CENTER, width=self.WIDTH,
+                  height=self.HEIGHT, theta=self.THETA)
+        self.bb0 = bb.copy()
 
-            Parameters
-            ----------
-            anchor : which anchor to drag
-            dx_sign : Direction of width change if anchor is moved right
-            dy_sign: Direction of height change if anchor is moved up
-        """
-        for anchor, dx, dy, bb in self.iter_drags():
-            yield self.check, anchor, dx, dy, bb
+        x, y = bb.anchor_pos(anchor)
+        bb.move_anchor(x + dx, y + dy, anchor)
+        self.check(anchor, dx, dy, bb)
 
     def check(self, anchor, dx, dy, bb):
         raise NotImplementedError()
-
-
-class TestDragUnconstrained(AnchorDragBase):
-
-    """
-    Dragging of anchors with no constraints
-    """
-
-    def check(self, anchor, dx, dy, bb):
-        dx_sign = dict(l=-1, c=0, r=1)[anchor[1]]
-        dy_sign = dict(u=1, c=0, l=-1)[anchor[0]]
-
-        assert bb.width == self.WIDTH + dx_sign * dx
-        assert bb.height == self.HEIGHT + dy_sign * dy
-        assert_allclose(bb.center[0], self.CENTER[0] + dx_sign / 2. * dx)
-        assert_allclose(bb.center[1], self.CENTER[1] + dy_sign / 2. * dy)
-        assert bb.theta == self.THETA
